@@ -1,4 +1,5 @@
 自启自扫描自选举循环监控自平衡并发计算集群服务器后台
+
 Auto-election cycle monitoring Operation and maintenance-free self-balancing cluster 
 
 多个计算服务器共同提供计算资源，要求热拔插，免运维，自我选举，生态圈内循环监控，动态平衡， 多个服务器宕机都不能影响正常业务，低耦合，占资源低不能影响计算同时实现高并发，自启自扫描注册自选举循环监控自平衡并发计算服务器集群。
