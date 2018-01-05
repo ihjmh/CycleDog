@@ -25,3 +25,6 @@ example:
 
     1. Multiple face recognition server decoupling, hot plug
     2. Other business scenarios that provide compute-intensive services
+
+
+Athor: Damon Howe Email:damonhowe2010@gmail.com
