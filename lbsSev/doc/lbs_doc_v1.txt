@@ -1,0 +1,72 @@
+该服务器是具备自动选举，探测，上报，和修复功能 算法负载均衡服务器
+
+test:
+    host:192.168.7.77 port:5058
+
+1. uri:/vote_sev 接受选举
+      dataType:json
+
+    other->self 
+        send {
+            "Command":"VoteSev",
+            "Content":{
+                "VoterIP":"192.168.0.1",
+            },
+        }
+
+        recv {
+            "ResultCode":"0/1",
+            "ResultDesc":"",
+            "Result":{
+                "CandidatesIP":"192.168.7.77"
+            }
+        }
+
+* 
+2. uri:/compare 
+
+    见aps9317.py
+
+
+3. uri:/set_leader method :post
+    boss->leader ,boss指定小组leader
+
+    send {
+        "Command":"SetLeader",
+        "Content":{
+            "DNSIP":["192.168.7.7","localhost"]
+        }
+    }
+
+* phonet 4. boss ->phonet  公布DNS 地址
+
+    uri:pub_dns method:post
+
+    send {
+        "Command":"PublishDNS",
+        "Content":{
+            "DNS":["192.168.7.7","localhost"]
+        }
+    }
+
+#phonet 拿到新dns地址时，要清空之前的DNS数据包
+
+5 phonet-> boss 查询Leader ip
+
+    uri:get_leader?mac="xxxxx" method:get
+
+6. boss-> leader 同步
+
+
+    dict {
+        "192.168.7.7":["xfdsfsdfasdf","对讲机的mac地址"],
+        "localhost":["对讲机的mac地址"],
+            }
+
+    uri:sync_dns_info method:post
+
+    send 
+        {
+        "192.168.7.7":10,
+        "localhost":8,
+            }
