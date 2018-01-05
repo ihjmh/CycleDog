@@ -15,20 +15,28 @@ debug = 1
 @singleton
 class CycleDog(object):
     executor = concurrent.futures.ThreadPoolExecutor(100)
+    """ 
+    doc here
     """
-    """
-    def __init__(self, hosts="",port =5058,phontMaxnum=2):
+    def __init__(self,  host="",
+                        port =5058,
+                        knock_period=10,
+                        user_max_num=2,
+                        user_port=5058,
+                        user_uri_accept_dns=""):
         self.status    = "follower"
-        self.localhost = hosts
+        self.localhost = host
+        self.user_port  = user_port
+        self.user_uri_accept_dns = user_uri_accept_dns
+        self.knock_period = int(knock_period)
         self.algo_hosts = []
         self.phot_host  = []
         self.looping    = 0
         self.port       = port
         self.Dict_algo_phont = dict()
-        self.phont_maxnum = phontMaxnum
+        self.phont_maxnum = user_max_num
         self.game_starting = 0
-        # print self.nodes
-        # self.localhost = "192.168.5.175"
+
 
     @gen.coroutine
     def get_wakeup(self,data):
@@ -80,10 +88,7 @@ class CycleDog(object):
             "PhotID":"xxxxx"
         }
         phonetalking got a algo sev address,
-        1. check if this phot the first ,if true ,return an algo 算法板IP列表： self.algo_hosts，
-        维护一个算法和可视对讲的字典self.Dict_algo_phont  ={
-            "192.168.7.77":[phont_host1,phont_host2]
-        }
+        1. check if this phot the first ,if true ,return an algo
         2. if not the first one ,check the old one still alive ,if not, self.get_report(old host)
         3. every algo got an max num phot ,self.phont_maxnum 
         ,record this 
@@ -94,14 +99,64 @@ class CycleDog(object):
             }
         }
         """ 
-        pass
+        r = {
+            "ResutCode":"false",
+        }
+        phot_id = data.get("PhotID")
+        host_for_phot_id = None
 
+        # 查看phot_id是否连接过算法板
+        for host, phots in self.Dict_algo_phont.items():
+            if phot_id in phots:  # poht_id连接过算法板
+                if host in self.algo_hosts:  # 如果该算法板可用，则直接返回该算法板
+                    host_for_phot_id = host
+                else:  # 如果该算法板不可用，则探测一下该算法板
+                    rec = yield self.knock_sev(host)
+                    Name = rec.get("Name","")
+                    if Name == "Algo":  # 该算法板现在可用
+                        self.algo_hosts.append(host)
+                        host_for_phot_id = host
+                    else:  # 该算法板仍不可用，从 self.Dict_algo_phont 删除
+                        yield game_start()
+                        raise gen.Retrun(r)
+                break
+        # first time 
+        if host_for_phot_id is None:
+            for algo_host in self.algo_hosts:
+                if algo_host not in self.Dict_algo_phont:
+                    self.Dict_algo_phont[algo_host] = list()
+                if algo_host in self.Dict_algo_phont and len(self.Dict_algo_phont[algo_host]) < self.phont_maxnum:
+                    self.Dict_algo_phont[algo_host].append(phot_id)
+                    host_for_phot_id = algo_host
+                    break
+
+        if host_for_phot_id is not None:
+            r = {
+                "ResutCode":"true",
+                "Result":{
+                    "AlgoUrl":"http://{}:{}".format(host_for_phot_id, self.port)
+                }
+            }
+        IOLoop.current().spawn_callback(self.inform_algo)
+        raise gen.Retrun(r)
+
+    #mult threading
+    @gen.coroutine
+    def inform_algo(self):
+        for host in self.algo_hosts:
+            yield self.sync_sev(host)
+
+    @gen.coroutine
+    def sync_algo(self,data):
+        if self.status!="leader":
+            Dict_algo_phont = data.get("Dict_algo_phont",{})
+            self.Dict_algo_phont = Dict_algo_phont
 
     @gen.coroutine
     def stare_front_dog(self,front_dog):
         cur_loop = copy.deepcopy(self.looping)
         while True:
-            yield gen.sleep(10)
+            yield gen.sleep(self.knock_period)
             if cur_loop!=self.looping:
                 break
             rec = yield self.knock_sev(front_dog)
@@ -161,7 +216,6 @@ class CycleDog(object):
             if ResultCode!="true":
                 fail_list.append(host)
         self.algo_hosts = [x for x in self.algo_hosts if x not in fail_list]
-        print "the wakeup_followers got:",rec
 
     @gen.coroutine
     def leader_work(self,sorted_hosts):
@@ -211,6 +265,27 @@ class CycleDog(object):
         data = {
             "Command":"ReportSev",
             "DeadHost":front_dog
+        }
+        r = dict()
+        try:
+            r = yield retrieve_rds(url, method, **data)
+        except Exception as e:
+            pass
+            # traceback.print_exc()
+        raise gen.Return(r)
+
+    @gen.coroutine
+    def sync_sev(self,host):
+        """
+        check sev id or heart beat 
+        url: http://host:port/knock  method:get ,use mult threading to check user 
+        return result
+        """
+        url = "http://{}:{}/syncalgo".format(host, self.port)
+        method = "POST"
+        data = {
+            "Command":"ReportSev",
+            "Dict_algo_phont":self.Dict_algo_phont
         }
         r = dict()
         try:
@@ -271,15 +346,18 @@ class CycleDog(object):
         }
         return result
         """
-        url = "http://{}:{}/getalgo".format(self.localhost, self.port)
+        phont_url =  "http://{}:{}/{}".format(host,self.user_port, self.user_uri_accept_dns)
+        dns_url = "http://{}:{}/getalgo".format(self.localhost, self.port)
         method = "POST"
         data = {
-            "Command":"DNSAddr",
-            "URL":url
+            "Command":"PublishDNS",
+            "Content":{
+                "DNS":dns_url
+            }
         }
         r = dict()
         try:
-            r = yield retrieve_rds(url, method, **data)
+            r = yield retrieve_rds(phont_url, method, **data)
         except Exception as e:
             pass
             # traceback.print_exc()
