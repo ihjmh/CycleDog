@@ -18,7 +18,7 @@ import os
 # from core.lsevstatus   import LSevStatus
 from cycledog.cycledog import CycleDog
 from cycledog.curi     import *
-from core.luri         import *
+# from core.luri         import *
 ##################config
 Conf_port               = int( getConfig("SevInfo","Port"))
 Conf_sev_name           = getConfig("SevInfo","Name")
@@ -40,14 +40,14 @@ class Application(web.Application):
             static_path=os.path.join(os.path.dirname(__file__), "static")
         )
         handlers = [
-            (r"/compare",CompareHandler,),    # 业务
-            (r"/contrast",ContrastHandler,),  # 业务
+            # (r"/compare",CompareHandler,),    # 业务
+            # (r"/contrast",ContrastHandler,),  # 业务
             (r"/report",ReportHandler,),
             (r"/wakeup",WakeupHandler,),
             (r"/knock",KnockHandler,dict(name =Conf_sev_name,host=Conf_localhost)),
             (r"/getalgo",GetAlgoHandler,),
             (r"/syncalgo",SyncAlgoHandler,),
-            (r"/test", TestHandler,),
+            # (r"/test", TestHandler,),
             (r"/(.*)",web.StaticFileHandler,{"path":settings['static_path']}),
         ]
 
