@@ -18,7 +18,7 @@ import os
 # from core.lsevstatus   import LSevStatus
 from cycledog.cycledog import CycleDog
 from cycledog.curi     import *
-# from core.luri         import *
+from core.luri         import *
 ##################config
 Conf_port               = int( getConfig("SevInfo","Port"))
 Conf_sev_name           = getConfig("SevInfo","Name")
@@ -26,9 +26,11 @@ Conf_net_code           = getConfig("NET","NetworkCode")
 Conf_UserMaxnum         = getConfig("AlgoInfo","UserMaxNum")
 Conf_SessionsMaxnum     = getConfig("AlgoInfo","SessionMaxNum")
 Conf_KnockPeriodTime     = getConfig("AlgoInfo","KnockPeriodTime")
+Conf_ScanPeriodTIme     = getConfig("AlgoInfo","ScanPeriodTIme")
 
 Conf_UserPort           = getConfig("UserInfo","Port")
 Conf_UriAcceptDNS       = getConfig("UserInfo","UriAcceptDNS")
+Conf_UserHosts          = getConfig("UserInfo","UserHosts")
 Conf_localhost          = getip(Conf_net_code)
 # Lcompare_lojb         = "" #LCompare()
 # Global_lojb           = LSevStatus(shost)
@@ -40,14 +42,14 @@ class Application(web.Application):
             static_path=os.path.join(os.path.dirname(__file__), "static")
         )
         handlers = [
-            # (r"/compare",CompareHandler,),    # 业务
-            # (r"/contrast",ContrastHandler,),  # 业务
+            (r"/compare",CompareHandler,),    # 业务
+            (r"/contrast",ContrastHandler,),  # 业务
             (r"/report",ReportHandler,),
             (r"/wakeup",WakeupHandler,),
             (r"/knock",KnockHandler,dict(name =Conf_sev_name,host=Conf_localhost)),
             (r"/getalgo",GetAlgoHandler,),
             (r"/syncalgo",SyncAlgoHandler,),
-            # (r"/test", TestHandler,),
+            (r"/test", TestHandler,),
             (r"/(.*)",web.StaticFileHandler,{"path":settings['static_path']}),
         ]
 
@@ -60,7 +62,9 @@ def wakeup_dog():
                     user_max_num=Conf_UserMaxnum,
                     user_port=Conf_UserPort,
                     knock_period =Conf_KnockPeriodTime,
-                    user_uri_accept_dns=Conf_UriAcceptDNS
+                    user_uri_accept_dns=Conf_UriAcceptDNS,
+                    user_hosts =eval( Conf_UserHosts),
+                    scan_period =Conf_ScanPeriodTIme
         ).game_start()
 
 def main():

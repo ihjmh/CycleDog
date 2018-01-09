@@ -6,15 +6,15 @@ from .utils import *
 import traceback
 from .lsevping import *
 import re
-import concurrent.futures
-from tornado.concurrent import run_on_executor
+# import concurrent.futures
+# from tornado.concurrent import run_on_executor
 from tornado.ioloop import IOLoop
 import copy
 debug = 1
 
 @singleton
 class CycleDog(object):
-    executor = concurrent.futures.ThreadPoolExecutor(100)
+    # executor = concurrent.futures.ThreadPoolExecutor(100)
     """ 
     doc here
     """
@@ -23,13 +23,18 @@ class CycleDog(object):
                         knock_period=10,
                         user_max_num=2,
                         user_port=5058,
-                        user_uri_accept_dns=""):
+                        user_uri_accept_dns="",
+                        user_hosts = [],
+                        scan_period =100,
+                        ):
         self.status    = "follower"
         self.localhost = host
         self.user_port  = user_port
         self.user_uri_accept_dns = user_uri_accept_dns
         self.knock_period = int(knock_period)
+        self.scan_period  = int(scan_period)
         self.algo_hosts = []
+        self.conf_user_hosts = user_hosts
         self.phot_host  = []
         self.looping    = 0
         self.port       = port
@@ -40,7 +45,7 @@ class CycleDog(object):
 
     @gen.coroutine
     def get_wakeup(self,data):
-        # print "the get wakeup got:",data
+        print "the get wakeup got:",data
         AlgoHosts = data.get("AlgoHosts",[])
         self.algo_hosts = AlgoHosts
         lindex = AlgoHosts.index(self.localhost)
@@ -54,6 +59,34 @@ class CycleDog(object):
             front_dog      = AlgoHosts[lindex-1]
         self.looping +=1
         IOLoop.current().spawn_callback(self.stare_front_dog,front_dog)
+        IOLoop.current().spawn_callback(self.leader_scan_host)
+
+    @gen.coroutine
+    def leader_scan_host(self):
+        while True:
+            # print "ready leader_scan_host"
+            yield gen.sleep(self.scan_period)
+            if self.status == "leader":
+                res = yield self.check_host()
+                if res:
+                    break
+            else:
+                break
+
+    @gen.coroutine
+    def check_host(self):
+        t = get_online_server(re.findall(r'\d+\.\d+\.\d+', self.localhost)[0])    # 已排序所有算法板列表
+        sorted_hosts = t[0]
+        # print "\n the check_host got:",sorted_hosts
+        res = yield [self.knock_sev(h) for h in sorted_hosts]
+        for rec in  res:
+            Name   = rec.get("Name","")
+            host   = sorted_hosts[res.index(rec)]
+            # print "the Name and host is:",Name,host
+            if (Name == "Algo" or Name == "PhoneTalk" )and not (host in self.algo_hosts or host in self.phot_host):
+                yield self.game_start()
+                raise gen.Return(True) 
+        raise gen.Return(False) 
 
     @gen.coroutine
     def get_report(self,data):
@@ -99,6 +132,7 @@ class CycleDog(object):
             }
         }
         """ 
+        print "the get_algo got:",data
         r = {
             "ResutCode":"false",
         }
@@ -118,7 +152,7 @@ class CycleDog(object):
                         host_for_phot_id = host
                     else:  # 该算法板仍不可用，从 self.Dict_algo_phont 删除
                         yield game_start()
-                        raise gen.Retrun(r)
+                        raise gen.Return(r)
                 break
         # first time 
         if host_for_phot_id is None:
@@ -132,19 +166,21 @@ class CycleDog(object):
 
         if host_for_phot_id is not None:
             r = {
-                "ResutCode":"true",
-                "Result":{
                     "AlgoUrl":"http://{}:{}".format(host_for_phot_id, self.port)
-                }
-            }
+                    }
+               
         IOLoop.current().spawn_callback(self.inform_algo)
-        raise gen.Retrun(r)
+        print "\n\nthe get_algo return ready to return :",r
+        raise gen.Return(r)
 
     #mult threading
     @gen.coroutine
     def inform_algo(self):
-        for host in self.algo_hosts:
-            yield self.sync_sev(host)
+        res = yield [self.sync_sev(host) for host in self.algo_hosts]
+        for rec in res:
+            print " the inform_algo got:",rec
+        # for host in self.algo_hosts:
+        #     yield self.sync_sev(host)
 
     @gen.coroutine
     def sync_algo(self,data):
@@ -189,8 +225,11 @@ class CycleDog(object):
         print "the dog is barking"
         self.game_starting = 1  #lock 
         self.algo_hosts = []
-        self.phot_host  = []
+        self.phot_host  +=self.conf_user_hosts
+        import time 
+        b_time = time.time()
         self.nodes     = get_online_server(re.findall(r'\d+\.\d+\.\d+', self.localhost)[0])    # 已排序所有算法板列表
+        print "the ping test got:",time.time()-b_time
         sorted_hosts = self.nodes[0]
         self_is_leader = yield self.check_whois_leader(sorted_hosts)
         print "the game_start got self_is_leader is:",self_is_leader
@@ -204,30 +243,37 @@ class CycleDog(object):
 
     @gen.coroutine
     def inform_phot(self):
-        for host in self.phot_host:
-            rec = yield self.wakeup_phot_sev(host)
+        print "inform_phot got:",self.phot_host
+        res = yield [self.wakeup_phot_sev(host) for host in self.phot_host]
+        for rec in res:
+            host   = self.phot_host[res.index(rec)]
+            print "the inform_phot got: ",rec
 
     @gen.coroutine
     def wakeup_followers(self):
         fail_list = []
-        for host in self.algo_hosts:
-            rec = yield self.wakeup_sev(host)
+        res = yield [self.wakeup_sev(host) for host in self.algo_hosts]
+        for rec in res:
+            # rec = yield self.wakeup_sev(host)
             ResultCode = rec.get("ResultCode","")
+            host   = self.algo_hosts[res.index(rec)]
             if ResultCode!="true":
                 fail_list.append(host)
         self.algo_hosts = [x for x in self.algo_hosts if x not in fail_list]
 
     @gen.coroutine
     def leader_work(self,sorted_hosts):
-        print "the sorted_hosts is:",sorted_hosts
-        for host in  sorted_hosts:
-            rec = yield self.knock_sev(host)
-            print "leader_work the rec is:",host,rec
-            Name = rec.get("Name","")
+        import time 
+        b_time = time.time()
+        res = yield [self.knock_sev(host) for host in sorted_hosts]
+        for rec in  res:
+            Name   = rec.get("Name","")
+            host   = sorted_hosts[res.index(rec)]
             if Name == "Algo" and  host not in self.algo_hosts:
                 self.algo_hosts.append(host)
             elif Name == "PhoneTalk" and host not in self.phot_host:
-                self.phot_host.append(host)            
+                self.phot_host.append(host)  
+        print "the leader_work cost",b_time-time.time()
 
     @gen.coroutine
     def check_whois_leader(self,sorted_hosts=[]):

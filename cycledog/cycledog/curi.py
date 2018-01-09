@@ -96,6 +96,7 @@ class GetAlgoHandler(web.RequestHandler):
     def post(self):
         ResultCode ="true"
         ResultDesc =""
+        r =dict()
         try:
             data=json.loads(self.request.body)
             # print "damon!!!!!!the alarm center is",data
@@ -107,6 +108,7 @@ class GetAlgoHandler(web.RequestHandler):
         t={
         "ResultCode":ResultCode,
         "ResultDesc":ResultDesc,
+        "Result":r
         }
         # print 'the TeamHandler r is',r
         self.write(t)
